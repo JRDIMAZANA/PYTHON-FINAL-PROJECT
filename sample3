@@ -1,0 +1,117 @@
+import tkinter as tk
+from tkinter import ttk
+import datetime as dt
+
+class ExpirationTrackerDesign:
+    def __init__(self, root):
+        self.root = root
+        self.root.title("Sari-sari Expiration Tracker")
+        self.root.geometry("800x700")
+        
+        self.create_design()
+    
+    def create_design(self):
+        # Main container
+        main_frame = ttk.Frame(self.root, padding="15")
+        main_frame.pack(fill=tk.BOTH, expand=True)
+        
+        # Title
+        title_label = ttk.Label(
+            main_frame, 
+            text="Sari-sari Expiration Tracker", 
+            font=('Arial', 16, 'bold')
+        )
+        title_label.pack(pady=10)
+        
+        # Input section
+        input_frame = ttk.LabelFrame(main_frame, text="Add New Item", padding="10")
+        input_frame.pack(fill=tk.X, pady=10)
+        
+        # First row of inputs
+        row1 = ttk.Frame(input_frame)
+        row1.pack(fill=tk.X, pady=5)
+        
+        ttk.Label(row1, text="Item Name:").pack(side=tk.LEFT, padx=5)
+        self.name_entry = ttk.Entry(row1, width=25)
+        self.name_entry.pack(side=tk.LEFT, padx=5)
+        
+        # Second row of inputs
+        row2 = ttk.Frame(input_frame)
+        row2.pack(fill=tk.X, pady=5)
+        
+        ttk.Label(row2, text="Expiration Date:").pack(side=tk.LEFT, padx=5)
+        self.date_entry = ttk.Entry(row2, width=15)
+        self.date_entry.pack(side=tk.LEFT, padx=5)
+        
+        ttk.Button(row2, text="Today", width=8).pack(side=tk.LEFT, padx=5)
+
+        ttk.Label(row2, text="Quantity:").pack(side=tk.LEFT, padx=(20, 5))
+        self.quantity_spinbox = ttk.Spinbox(row2, from_=1, to=100, width=5)
+        self.quantity_spinbox.pack(side=tk.LEFT, padx=5)
+        
+        # Add button
+        button_frame = ttk.Frame(input_frame)
+        button_frame.pack(pady=10)
+        
+        ttk.Button(button_frame, text="Add Item", width=12).pack(side=tk.LEFT, padx=5)
+        ttk.Button(button_frame, text="Clear", width=12).pack(side=tk.LEFT, padx=5)
+        
+        # Search section
+        search_frame = ttk.Frame(main_frame)
+        search_frame.pack(fill=tk.X, pady=10)
+        
+        ttk.Label(search_frame, text="Search:").pack(side=tk.LEFT, padx=5)
+        self.search_entry = ttk.Entry(search_frame, width=20)
+        self.search_entry.pack(side=tk.LEFT, padx=5)
+
+        # Items list section
+        list_frame = ttk.LabelFrame(main_frame, text="Tracked Items", padding="10")
+        list_frame.pack(fill=tk.BOTH, expand=True, pady=10)
+        
+        # Create treeview with sample data
+        columns = ('Name', 'Category', 'Expiration', 'Days Left', 'Status')
+        self.tree = ttk.Treeview(list_frame, columns=columns, show='headings', height=12)
+        
+        # Define headings
+        self.tree.heading('Name', text='Item Name')
+        self.tree.heading('Category', text='Category')
+        self.tree.heading('Expiration', text='Expiration Date')
+        self.tree.heading('Days Left', text='Days Left')
+        self.tree.heading('Status', text='Status')
+        
+        # Define columns
+        self.tree.column('Name', width=150)
+        self.tree.column('Category', width=100)
+        self.tree.column('Expiration', width=120)
+        self.tree.column('Days Left', width=80)
+        self.tree.column('Status', width=100)
+        
+      
+        # Scrollbar for treeview
+        scrollbar = ttk.Scrollbar(list_frame, orient=tk.VERTICAL, command=self.tree.yview)
+        self.tree.configure(yscrollcommand=scrollbar.set)
+        
+        self.tree.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+        
+        # Control buttons
+        control_frame = ttk.Frame(main_frame)
+        control_frame.pack(pady=10)
+        
+        ttk.Button(control_frame, text="Edit Selected").pack(side=tk.LEFT, padx=5)
+        ttk.Button(control_frame, text="Delete Selected").pack(side=tk.LEFT, padx=5)
+        ttk.Button(control_frame, text="Check Expiring").pack(side=tk.LEFT, padx=5)
+        ttk.Button(control_frame, text="Export Data").pack(side=tk.LEFT, padx=5)
+        ttk.Button(control_frame, text="Import Data").pack(side=tk.LEFT, padx=5)
+    
+def date(self):
+     Date_Today = dt.date.now().strftime("%M-%d-%Y")
+     date.Label.config(text=Date_Today).pack(side=tk.LEFT, padx=20)
+    
+def main():
+    root = tk.Tk()
+    app = ExpirationTrackerDesign(root)
+    root.mainloop()
+
+if __name__ == "__main__":
+    main()
