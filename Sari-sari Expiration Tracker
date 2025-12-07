@@ -1,0 +1,435 @@
+import tkinter as tk
+from tkinter import ttk, messagebox, simpledialog
+import sqlite3
+from datetime import datetime, timedelta
+import json
+
+
+class ExpirationTracker:
+    def __init__(self, root):
+        self.root = root
+        self.root.title("Sari-sari Expiration Tracker")
+        self.root.geometry("1100x700")
+        self.root.configure(bg="#130000")
+        
+        # Initialize database
+        self.init_database()
+        
+        # Create GUI
+        self.create_gui()
+        
+        # Load data
+        self.load_items()
+        
+        # Check for expiring items
+        self.check_expiring_items()
+    
+    def init_database(self):
+        """Initialize SQLite database"""
+        self.conn = sqlite3.connect('Sari-sari expired_tracker.db')
+        self.cursor = self.conn.cursor()
+        
+        # Create table if it doesn't exist
+        self.cursor.execute('''
+            CREATE TABLE IF NOT EXISTS items (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT NOT NULL,
+                category TEXT,
+                expiration_date TEXT NOT NULL,
+                quantity INTEGER DEFAULT 1,
+                created_date TEXT DEFAULT CURRENT_TIMESTAMP
+            )
+        ''')
+        self.conn.commit()
+    
+    def create_gui(self):
+        """Create the main GUI interface"""
+        # Main frame
+        main_frame = ttk.Frame(self.root, padding="10")
+        main_frame.grid(row=0, column=0, sticky=(tk.W, tk.E, tk.N, tk.S))
+        
+        # Configure grid weights
+        self.root.columnconfigure(0, weight=1)
+        self.root.rowconfigure(0, weight=1)
+        main_frame.columnconfigure(1, weight=1)
+        main_frame.rowconfigure(1, weight=1)
+        
+        # Title
+        title_label = ttk.Label(main_frame, text="Sari-sari Expiration Tracker", 
+                               font=('Arial', 16, 'bold'))
+        title_label.grid(row=0, column=0, columnspan=3, pady=(0, 20))
+        
+        # Input frame
+        input_frame = ttk.LabelFrame(main_frame, text="Add New Item", padding="10")
+        input_frame.grid(row=1, column=0, columnspan=3, sticky=(tk.W, tk.E), pady=(0, 10))
+        input_frame.columnconfigure(1, weight=1)
+        
+        # Item name
+        ttk.Label(input_frame, text="Item Name:").grid(row=0, column=0, sticky=tk.W, padx=(0, 5))
+        self.name_entry = ttk.Entry(input_frame, width=30)
+        self.name_entry.grid(row=0, column=1, sticky=(tk.W, tk.E), padx=(0, 10))
+        
+        # Category
+        ttk.Label(input_frame, text="Category:").grid(row=0, column=2, sticky=tk.W, padx=(0, 5))
+        self.category_combo = ttk.Combobox(input_frame, values=[
+            "Food", "Medicine", "Cosmetics", "Household", "Other"
+        ], width=15)
+        self.category_combo.grid(row=0, column=3, sticky=(tk.W, tk.E))
+        self.category_combo.set("Food")
+        
+        # Expiration date
+        ttk.Label(input_frame, text="Expiration Date:").grid(row=1, column=0, sticky=tk.W, padx=(0, 5))
+        self.date_entry = ttk.Entry(input_frame, width=30)
+        self.date_entry.grid(row=1, column=1, sticky=(tk.W, tk.E), padx=(0, 10))
+        ttk.Button(input_frame, text="Today", command=self.set_today).grid(row=1, column=2, padx=(0, 5))
+        
+        # Quantity
+        ttk.Label(input_frame, text="Quantity:").grid(row=2, column=0, sticky=tk.W, padx=(0, 5))
+        self.quantity_spinbox = ttk.Spinbox(input_frame, from_=1, to=100, width=10)
+        self.quantity_spinbox.grid(row=2, column=1, sticky=tk.W, padx=(0, 10))
+        self.quantity_spinbox.set(1)
+        
+        
+        # Buttons
+        button_frame = ttk.Frame(input_frame)
+        button_frame.grid(row=3, column=0, columnspan=4, pady=(10, 0))
+        
+        ttk.Button(button_frame, text="Add Item", command=self.add_item).pack(side=tk.LEFT, padx=(0, 10))
+        ttk.Button(button_frame, text="Clear", command=self.clear_form).pack(side=tk.LEFT, padx=(0, 10))
+        
+        # Search frame
+        search_frame = ttk.Frame(main_frame)
+        search_frame.grid(row=2, column=0, columnspan=3, sticky=(tk.W, tk.E), pady=(10, 5))
+        search_frame.columnconfigure(0, weight=1)
+        
+        ttk.Label(search_frame, text="Search:").grid(row=0, column=0, sticky=tk.W)
+        self.search_entry = ttk.Entry(search_frame)
+        self.search_entry.grid(row=0, column=1, sticky=(tk.W, tk.E), padx=(5, 10))
+        self.search_entry.bind('<KeyRelease>', self.search_items)
+        
+        # Filter by category
+        ttk.Label(search_frame, text="Category:").grid(row=0, column=2, sticky=tk.W, padx=(10, 5))
+        self.filter_combo = ttk.Combobox(search_frame, values=[
+            "All", "Food", "Medicine", "Cosmetics", "Household", "Other"
+        ], width=10)
+        self.filter_combo.grid(row=0, column=3, sticky=(tk.W, tk.E))
+        self.filter_combo.set("All")
+        self.filter_combo.bind('<<ComboboxSelected>>', self.filter_items)
+        
+        # Items list frame
+        list_frame = ttk.LabelFrame(main_frame, text="Tracked Items", padding="10")
+        list_frame.grid(row=3, column=0, columnspan=3, sticky=(tk.W, tk.E, tk.N, tk.S), pady=(10, 0))
+        list_frame.columnconfigure(0, weight=1)
+        list_frame.rowconfigure(0, weight=1)
+        
+        # Treeview for items
+        columns = ('ID', 'Name', 'Category', 'Expiration', 'Days Left', 'Quantity')
+        self.tree = ttk.Treeview(list_frame, columns=columns, show='headings', height=15)
+        
+        # Define headings
+        self.tree.heading('ID', text='ID')
+        self.tree.heading('Name', text='Item Name')
+        self.tree.heading('Category', text='Category')
+        self.tree.heading('Expiration', text='Expiration Date')
+        self.tree.heading('Days Left', text='Days Left')
+        self.tree.heading('Quantity', text='Qty')
+    
+        
+        # Configure columns
+        self.tree.column('ID', width=40)
+        self.tree.column('Name', width=150)
+        self.tree.column('Category', width=100)
+        self.tree.column('Expiration', width=120)
+        self.tree.column('Days Left', width=80)
+        self.tree.column('Quantity', width=60)
+        
+        # Scrollbar for treeview
+        scrollbar = ttk.Scrollbar(list_frame, orient=tk.VERTICAL, command=self.tree.yview)
+        self.tree.configure(yscrollcommand=scrollbar.set)
+        
+        self.tree.grid(row=0, column=0, sticky=(tk.W, tk.E, tk.N, tk.S))
+        scrollbar.grid(row=0, column=1, sticky=(tk.N, tk.S))
+        
+        # Item control buttons
+        control_frame = ttk.Frame(main_frame)
+        control_frame.grid(row=4, column=0, columnspan=3, pady=(10, 0))
+        
+        ttk.Button(control_frame, text="Edit Selected", command=self.edit_item).pack(side=tk.LEFT, padx=(0, 10))
+        ttk.Button(control_frame, text="Delete Selected", command=self.delete_item).pack(side=tk.LEFT, padx=(0, 10))
+        ttk.Button(control_frame, text="Refresh", command=self.load_items).pack(side=tk.LEFT, padx=(0, 10))
+        ttk.Button(control_frame, text="Export Data", command=self.export_data).pack(side=tk.LEFT)
+        
+        # Bind double click to edit
+        self.tree.bind('<Double-1>', lambda e: self.edit_item())
+    
+    def set_today(self):
+        """Set expiration date to today"""
+        today = datetime.now().strftime('%Y-%m-%d')
+        self.date_entry.delete(0, tk.END)
+        self.date_entry.insert(0, today)
+
+    
+    def calculate_days_left(self, expiration_date):
+        """Calculate days left until expiration"""
+        exp_date = datetime.strptime(expiration_date, '%Y-%m-%d')
+        today = datetime.now()
+        delta = exp_date - today
+        return delta.days
+    
+    def add_item(self):
+        """Add a new item to the tracker"""
+        name = self.name_entry.get().strip()
+        category = self.category_combo.get()
+        expiration_date = self.date_entry.get().strip()
+        quantity = self.quantity_spinbox.get()
+        
+        # Validation
+        if not name or not expiration_date:
+            messagebox.showerror("Error", "Item name and expiration date are required!")
+            return
+        
+        try:
+            # Validate date format
+            datetime.strptime(expiration_date, '%Y-%m-%d')
+        except ValueError:
+            messagebox.showerror("Error", "Invalid date format! Use YYYY-MM-DD")
+            return
+        
+        try:
+            self.cursor.execute('''
+                INSERT INTO items (name, category, expiration_date, quantity)
+                VALUES (?, ?, ?, ?)
+            ''', (name, category, expiration_date, quantity))
+            self.conn.commit()
+            
+            self.clear_form()
+            self.load_items()
+            messagebox.showinfo("Success", "Item added successfully!")
+            
+        except Exception as e:
+            messagebox.showerror("Error", f"Failed to add item: {str(e)}")
+    
+    def clear_form(self):
+        """Clear the input form"""
+        self.name_entry.delete(0, tk.END)
+        self.category_combo.set("Food")
+        self.date_entry.delete(0, tk.END)
+        self.quantity_spinbox.set(1)
+    
+    def load_items(self):
+        """Load items from database into the treeview"""
+        # Clear existing items
+        for item in self.tree.get_children():
+            self.tree.delete(item)
+        
+        self.cursor.execute('''
+            SELECT id, name, category, expiration_date, quantity
+            FROM items 
+            ORDER BY expiration_date ASC
+        ''')
+        
+        items = self.cursor.fetchall()
+        
+        for item in items:
+            days_left = self.calculate_days_left(item[3])
+            
+            # Color coding based on days left 
+            tags = ()
+            if days_left < 0:
+                tags = ('expired',)
+            elif days_left <= 7:
+                tags = ('warning',)
+            elif days_left <= 30:
+                tags = ('notice',)
+            
+            self.tree.insert('', 'end', values=(
+                item[0], item[1], item[2], item[3], days_left, item[4]
+            ), tags=tags)
+        
+        # Configure tag colors
+        self.tree.tag_configure('expired', background='#ffcccc')  # Light red
+        self.tree.tag_configure('warning', background='#fff0cc')  # Light orange
+        self.tree.tag_configure('notice', background='#f0f0f0')   # Light gray
+    
+    def search_items(self, event=None):
+        """Filter items in Treeview based on search text"""
+        query = self.search_entry.get().lower()
+
+        # Clear Treeview first
+        for item in self.tree.get_children():
+            self.tree.delete(item)
+
+        # If you are using DB:
+        if self.filter_combo.get() == "All":
+            self.cursor.execute("SELECT id, name, category, expiration_date, quantity FROM items")
+        else:
+            self.cursor.execute("SELECT id, name, category, expiration_date, quantity FROM items WHERE category=?",
+                                (self.filter_combo.get(),))
+
+        rows = self.cursor.fetchall()
+
+        # Filter rows by search query (match against name or category)
+        for row in rows:
+            if query in row[1].lower() or query in row[2].lower():
+                self.tree.insert("", "end", values=row)
+    
+    def filter_items(self, event=None) :
+        """Filter items by category"""
+        selected_category = self.filter_combo.get()
+
+        for item in self.tree.get_children():
+            self.tree.delete(item)
+
+        if selected_category == "All":
+            self.cursor.execute("SELECT id, name, category, expiration_date, quantity FROM items")
+        else:
+            self.cursor.execute("SELECT id, name, category, expiration_date, quantity FROM items WHERE category=?", (selected_category,))
+        
+        for row in self.cursor.fetchall():
+            self.tree.insert("", "end", values=row)
+
+    
+    def edit_item(self):
+        """Edit selected item"""
+        selected = self.tree.selection()
+        if not selected:
+            messagebox.showwarning("Warning", "Please select an item to edit!")
+            return
+        
+        item_id = self.tree.item(selected[0])['values'][0]
+        
+        # Get current values
+        self.cursor.execute('SELECT * FROM items WHERE id = ?', (item_id,))
+        item = self.cursor.fetchone()
+        
+        # Create edit dialog
+        edit_window = tk.Toplevel(self.root)
+        edit_window.title("Edit Item")
+        edit_window.geometry("400x300")
+        edit_window.transient(self.root)
+        edit_window.grab_set()
+        
+        # Edit form
+        ttk.Label(edit_window, text="Item Name:").grid(row=0, column=0, sticky=tk.W, padx=10, pady=5)
+        name_entry = ttk.Entry(edit_window, width=30)
+        name_entry.grid(row=0, column=1, sticky=(tk.W, tk.E), padx=10, pady=5)
+        name_entry.insert(0, item[1])
+        
+        ttk.Label(edit_window, text="Category:").grid(row=1, column=0, sticky=tk.W, padx=10, pady=5)
+        category_combo = ttk.Combobox(edit_window, values=[
+            "Food", "Medicine", "Cosmetics", "Household", "Other"
+        ], width=15)
+        category_combo.grid(row=1, column=1, sticky=tk.W, padx=10, pady=5)
+        category_combo.set(item[2])
+        
+        ttk.Label(edit_window, text="Expiration Date:").grid(row=2, column=0, sticky=tk.W, padx=10, pady=5)
+        date_entry = ttk.Entry(edit_window, width=30)
+        date_entry.grid(row=2, column=1, sticky=tk.W, padx=10, pady=5)
+        date_entry.insert(0, item[3])
+        
+        ttk.Label(edit_window, text="Quantity:").grid(row=3, column=0, sticky=tk.W, padx=10, pady=5)
+        quantity_spinbox = ttk.Spinbox(edit_window, from_=1, to=100, width=10)
+        quantity_spinbox.grid(row=3, column=1, sticky=tk.W, padx=10, pady=5)
+        quantity_spinbox.set(item[4])
+        
+        
+        def save_changes():
+            try:
+                self.cursor.execute('''
+                    UPDATE items 
+                    SET name=?, category=?, expiration_date=?, quantity=?
+                    WHERE id=?
+                ''', (
+                    name_entry.get().strip(),
+                    category_combo.get(),
+                    date_entry.get().strip(),
+                    quantity_spinbox.get(),
+                    item_id
+                ))
+                self.conn.commit()
+                edit_window.destroy()
+                self.load_items()
+                messagebox.showinfo("Success", "Item updated successfully!")
+            except Exception as e:
+                messagebox.showerror("Error", f"Failed to update item: {str(e)}")
+        
+        ttk.Button(edit_window, text="Save", command=save_changes).grid(row=5, column=0, columnspan=2, pady=20)
+    
+    def delete_item(self):
+        """Delete selected item"""
+        selected = self.tree.selection()
+        if not selected:
+            messagebox.showwarning("Warning", "Please select an item to delete!")
+            return
+        
+        if messagebox.askyesno("Confirm", "Are you sure you want to delete this item?"):
+            item_id = self.tree.item(selected[0])['values'][0]
+            
+            try:
+                self.cursor.execute('DELETE FROM items WHERE id = ?', (item_id,))
+                self.conn.commit()
+                self.load_items()
+                messagebox.showinfo("Success", "Item deleted successfully!")
+            except Exception as e:
+                messagebox.showerror("Error", f"Failed to delete item: {str(e)}")
+    
+    def check_expiring_items(self):
+        """Check for items that are expiring soon and show notification"""
+        self.cursor.execute('''
+            SELECT name, expiration_date 
+            FROM items 
+            WHERE expiration_date <= date('now', '+7 days')
+            ORDER BY expiration_date ASC
+        ''')
+        
+        expiring_items = self.cursor.fetchall()
+        
+        if expiring_items:
+            warning_text = "The following items are expiring soon:\n\n"
+            for item in expiring_items:
+                days_left = self.calculate_days_left(item[1])
+                status = "EXPIRED" if days_left < 0 else f"in {days_left} days"
+                warning_text += f"• {item[0]} - {item[1]} ({status})\n"
+            
+            messagebox.showwarning("Expiration Warning", warning_text)
+    
+    def export_data(self):
+        """Export data to JSON file"""
+        try:
+            self.cursor.execute('SELECT * FROM items')
+            items = self.cursor.fetchall()
+
+            if not items:
+                messagebox.showwarning("No Data", "There are no items to export!")
+                return
+            
+            export_data = []
+            for item in items:
+                export_data.append({
+                    'id': item[0],
+                    'name': item[1],
+                    'category': item[2],
+                    'expiration_date': item[3],
+                    'quantity': item[4],
+                    'created_date': item[5]
+                })
+            
+            with open('expiration_data_export.json', 'w') as f:
+                json.dump(export_data, f, indent=2)
+            
+            messagebox.showinfo("Success", "Data exported to 'expiration_data_export.json'")
+        except Exception as e:
+            messagebox.showerror("Error", f"Failed to export data: {str(e)}")
+    
+    def __del__(self):
+        """Close database connection when object is destroyed"""
+        if hasattr(self, 'conn'):
+            self.conn.close()
+
+def main():
+    root = tk.Tk()
+    app = ExpirationTracker(root)
+    root.mainloop()
+
+if __name__ == "__main__":
+    main()
